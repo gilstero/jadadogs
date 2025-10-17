@@ -1,27 +1,32 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Jada Field 🐶</title>
 <style>
-  html,body{margin:0;height:100%;background:#0c1116;color:#e4ebf1;
+  html,body{margin:0;height:100%;background:#0c1116;color:#d8e1e8;
     font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Inter,Arial;}
-  .wrap{display:grid;grid-template-columns:300px 1fr;gap:16px;height:100%;
+  .wrap{display:grid;grid-template-columns:320px 1fr;gap:16px;height:100%;
     padding:16px;box-sizing:border-box;}
   .sidebar{background:#121a22;border-radius:16px;padding:16px;
-    display:flex;flex-direction:column;gap:12px;}
+    display:flex;flex-direction:column;gap:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);}
   h1{margin:0 0 8px;font-size:20px;font-weight:700;}
   .stat{display:flex;justify-content:space-between;background:#0f1720;
-    padding:10px 12px;border-radius:12px;}
+    padding:10px 12px;border-radius:12px;font-variant-numeric:tabular-nums;}
+  .shop{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
   .btn{cursor:pointer;border:none;border-radius:12px;padding:10px 12px;
-    background:#0f1720;color:#e4ebf1;transition:.12s;}
-  .btn:hover{transform:translateY(-1px);}
-  .grid{position:relative;background:#1a3d1a;border-radius:16px;overflow:hidden;}
+    font-weight:600;background:#0f1720;color:#d8e1e8;outline:1px solid #1e2936;
+    transition:.12s ease;}
+  .btn:hover{outline-color:#2b394a;transform:translateY(-1px);}
+  .btn.active{box-shadow:0 0 0 2px #38bdf8 inset;}
+  .grid{position:relative;background:#1a3d1a;border-radius:16px;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);overflow:hidden;}
   canvas{display:block;width:100%;height:100%;image-rendering:pixelated;}
   .win{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
     background:rgba(0,0,0,.6);backdrop-filter:blur(2px);}
-  .win>div{background:#081018;border:1px solid #1e2936;padding:24px;border-radius:16px;text-align:center;}
+  .win>div{background:#081018;border:1px solid #1e2936;padding:24px;
+    border-radius:16px;max-width:480px;text-align:center;}
   @media(max-width:900px){.wrap{grid-template-columns:1fr}.grid{height:min(90vw,90vh)}}
 </style>
 </head>
@@ -31,161 +36,114 @@
     <h1>Jada Field 🐕‍🦺</h1>
     <div class="stat"><span>Coins</span><span id="coins">0</span></div>
     <div class="stat"><span>Jadas</span><span id="count">1 / 50</span></div>
-    <button class="btn" id="buyJada">Buy Jada ($100)</button>
-    <button class="btn" id="buyFood">Buy Food ($10)</button>
-    <button class="btn" id="buyToy">Buy Toy ($25)</button>
+    <div class="stat"><span>Income</span><span id="income">0 / min</span></div>
+
+    <div class="shop">
+      <button class="btn" id="buyJada">Buy Jada ($100)</button>
+      <button class="btn" id="buyFood">Buy Food ($10)</button>
+      <button class="btn" id="buyToy">Buy Toy ($25)</button>
+      <button class="btn" id="reset">Reset</button>
+    </div>
+
+    <div class="shop">
+      <button class="btn active" data-tool="hand" id="toolHand">Hand</button>
+      <button class="btn" data-tool="food" id="toolFood">Food Tool</button>
+      <button class="btn" data-tool="toy" id="toolToy">Toy Tool</button>
+    </div>
+
+    <small style="opacity:.8">Tip: select a tool to place items or view. Win at 50 Jadas!</small>
   </div>
   <div class="grid"><canvas id="field" width="200" height="200"></canvas></div>
 </div>
+
 <div class="win" id="win"><div><h2>🎉 You Win!</h2><p>You reached 50 Jadas!</p></div></div>
 
 <script>
-const GRID_W=200,GRID_H=200;
-const COIN_RATE=1/15, COSTS={jada:100,food:10,toy:25}, WIN=50;
+const GRID_W=200,GRID_H=200,COIN_RATE=1/15,COST={jada:100,food:10,toy:25},WIN=50;
 const canvas=document.getElementById('field'),ctx=canvas.getContext('2d');
-const coinsEl=document.getElementById('coins'),countEl=document.getElementById('count');
-const buyJada=document.getElementById('buyJada'),buyFood=document.getElementById('buyFood'),buyToy=document.getElementById('buyToy');
-let tool=null;
-let state=JSON.parse(localStorage.getItem('jadaField')||'null')||
- {coins:0,jadas:[spawnJada()],food:[],toys:[]};
+const coinsEl=document.getElementById('coins'),countEl=document.getElementById('count'),incomeEl=document.getElementById('income');
+const buyJada=document.getElementById('buyJada'),buyFood=document.getElementById('buyFood'),
+      buyToy=document.getElementById('buyToy'),resetBtn=document.getElementById('reset');
+const toolBtns=[...document.querySelectorAll('[data-tool]')];
+let tool='hand';
 
-function spawnJada(){
-  return{x:Math.random()*180+10,y:Math.random()*180+10,
-         dir:Math.random()*Math.PI*2,speed:12,tail:0,boost:0,play:0};
-}
-function save(){localStorage.setItem('jadaField',JSON.stringify(state));}
+let state=JSON.parse(localStorage.getItem('jada-field')||'null')||
+ {coins:0,jadas:[spawnJada()],food:[],toys:[],time:0};
+
+function spawnJada(){return{x:Math.random()*180+10,y:Math.random()*180+10,dir:Math.random()*Math.PI*2,
+ speed:12,tail:0,boost:0,play:0};}
+function save(){localStorage.setItem('jada-field',JSON.stringify(state));}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 
 function drawGrass(){
-  for(let y=0;y<GRID_H;y++){
-    for(let x=0;x<GRID_W;x++){
-      ctx.fillStyle=((x+y)&1)?'#1a3d1a':'#1d421d';
-      ctx.fillRect(x,y,1,1);
-    }
-  }
-}
-function drawFood(f){
-  ctx.fillStyle="#ffd166";
-  ctx.fillRect(f.x-1,f.y-0.5,2,1);
-  ctx.fillStyle="#ffb703";
-  ctx.fillRect(f.x-0.2,f.y-0.7,0.4,0.4);
-}
-function drawToy(t){
-  ctx.fillStyle="#60a5fa";
-  ctx.beginPath();ctx.arc(t.x,t.y,0.8,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle="#bde0fe";ctx.lineWidth=0.2;ctx.stroke();
-}
+ for(let y=0;y<GRID_H;y++){for(let x=0;x<GRID_W;x++){
+   ctx.fillStyle=((x+y)&1)?'#1a3d1a':'#1d421d';ctx.fillRect(x,y,1,1);
+ }}}
+function drawFood(f){ctx.fillStyle="#ffd166";ctx.fillRect(f.x-1,f.y-0.5,2,1);}
+function drawToy(t){ctx.fillStyle="#60a5fa";ctx.beginPath();ctx.arc(t.x,t.y,0.8,0,Math.PI*2);ctx.fill();}
 
-// --- Pixel Bernedoodle (side view, 6x4px) ---
+// pixel side-view Bernedoodle
 function drawJada(j){
-  ctx.save();
-  ctx.translate(j.x,j.y);
-  ctx.rotate(j.dir);
-  const s=1.2; // pixel scale
-
-  // Body (black)
-  ctx.fillStyle="#111";
-  ctx.fillRect(-2*s,-1.5*s,4*s,3*s);
-
-  // Chest patch (white)
-  ctx.fillStyle="#f2f2f2";
-  ctx.fillRect(-1.2*s,-0.5*s,1.2*s,1*s);
-
-  // Head (black)
-  ctx.fillStyle="#111";
-  ctx.fillRect(2*s,-1.5*s,2*s,2.5*s);
-
-  // Snout / face patch
-  ctx.fillStyle="#fafafa";
-  ctx.fillRect(3.5*s,-0.5*s,1*s,1*s);
-
-  // Eye
-  ctx.fillStyle="#000";
-  ctx.fillRect(3.4*s,-0.9*s,0.3*s,0.3*s);
-
-  // Ear
-  ctx.fillStyle="#000";
-  ctx.fillRect(2*s,-1.8*s,0.8*s,0.6*s);
-
-  // Legs
-  ctx.fillStyle="#000";
-  ctx.fillRect(-1.5*s,1.2*s,0.6*s,1*s);
-  ctx.fillRect(0.5*s,1.2*s,0.6*s,1*s);
-
-  // Tail (wag)
-  const wag=Math.sin(j.tail)*0.7;
-  ctx.strokeStyle="#fff";ctx.lineWidth=0.4;
-  ctx.beginPath();
-  ctx.moveTo(-2.2*s,-0.6*s);
-  ctx.lineTo(-3*s,-0.6*s+wag);
-  ctx.stroke();
-  ctx.restore();
+ ctx.save();ctx.translate(j.x,j.y);ctx.rotate(j.dir);const s=1.2;
+ ctx.fillStyle="#111";ctx.fillRect(-2*s,-1.5*s,4*s,3*s);
+ ctx.fillStyle="#f2f2f2";ctx.fillRect(-1.2*s,-0.5*s,1.2*s,1*s);
+ ctx.fillStyle="#111";ctx.fillRect(2*s,-1.5*s,2*s,2.5*s);
+ ctx.fillStyle="#fafafa";ctx.fillRect(3.5*s,-0.5*s,1*s,1*s);
+ ctx.fillStyle="#000";ctx.fillRect(3.4*s,-0.9*s,0.3*s,0.3*s);
+ ctx.fillStyle="#000";ctx.fillRect(2*s,-1.8*s,0.8*s,0.6*s);
+ ctx.fillRect(-1.5*s,1.2*s,0.6*s,1*s);ctx.fillRect(0.5*s,1.2*s,0.6*s,1*s);
+ const wag=Math.sin(j.tail)*0.7;ctx.strokeStyle="#fff";ctx.lineWidth=0.4;
+ ctx.beginPath();ctx.moveTo(-2.2*s,-0.6*s);ctx.lineTo(-3*s,-0.6*s+wag);ctx.stroke();
+ ctx.restore();
 }
 
-// --- Logic ---
 let last=performance.now();
 function loop(now){
-  const dt=(now-last)/1000; last=now;
-  let rate=COIN_RATE;
+ const dt=(now-last)/1000;last=now;
+ let rate=COIN_RATE;
+ for(const j of state.jadas){
+   if(j.play>0){j.play-=dt;j.tail+=dt*25;continue;}
+   j.x+=Math.cos(j.dir)*j.speed*dt*(j.boost>0?1.4:1);
+   j.y+=Math.sin(j.dir)*j.speed*dt*(j.boost>0?1.4:1);
+   j.tail+=dt*10*(j.boost>0?2:1);
+   if(j.boost>0)j.boost-=dt;
+   if(j.x<3){j.x=3;j.dir=Math.PI-j.dir;}
+   if(j.x>GRID_W-3){j.x=GRID_W-3;j.dir=Math.PI-j.dir;}
+   if(j.y<3){j.y=3;j.dir=-j.dir;}
+   if(j.y>GRID_H-3){j.y=GRID_H-3;j.dir=-j.dir;}
+   if(Math.random()<0.02)j.dir+=Math.random()-0.5;
+   for(const f of state.food){const d2=(f.x-j.x)**2+(f.y-j.y)**2;if(d2<16){j.boost=3;rate=COIN_RATE*2;}}
+   for(const t of state.toys){const d2=(t.x-j.x)**2+(t.y-j.y)**2;if(d2<9){j.play=2;}}
+ }
+ state.coins+=state.jadas.length*rate*dt;
 
-  for(const j of state.jadas){
-    if(j.play>0){ j.play-=dt; j.tail+=dt*25; continue; }
-    j.x+=Math.cos(j.dir)*j.speed*dt*(j.boost>0?1.4:1);
-    j.y+=Math.sin(j.dir)*j.speed*dt*(j.boost>0?1.4:1);
-    j.tail+=dt*10*(j.boost>0?2:1);
-    if(j.boost>0) j.boost-=dt;
-
-    // Bounce on edges
-    if(j.x<3){ j.x=3; j.dir=Math.PI-j.dir; }
-    if(j.x>GRID_W-3){ j.x=GRID_W-3; j.dir=Math.PI-j.dir; }
-    if(j.y<3){ j.y=3; j.dir=-j.dir; }
-    if(j.y>GRID_H-3){ j.y=GRID_H-3; j.dir=-j.dir; }
-
-    // slight wander
-    if(Math.random()<0.02) j.dir+=Math.random()-0.5;
-
-    // Food
-    for(const f of state.food){
-      const d2=(f.x-j.x)**2+(f.y-j.y)**2;
-      if(d2<16){ j.boost=3; rate=COIN_RATE*2; }
-    }
-    // Toys
-    for(const t of state.toys){
-      const d2=(t.x-j.x)**2+(t.y-j.y)**2;
-      if(d2<9){ j.play=2; }
-    }
-  }
-
-  state.coins+=state.jadas.length*rate*dt;
-
-  // Render
-  drawGrass();
-  state.food.forEach(drawFood);
-  state.toys.forEach(drawToy);
-  state.jadas.forEach(drawJada);
-
-  coinsEl.textContent=Math.floor(state.coins);
-  countEl.textContent=`${state.jadas.length} / ${WIN}`;
-  if(state.jadas.length>=WIN)document.getElementById('win').style.display='flex';
-  if(Math.random()<0.02)save();
-  requestAnimationFrame(loop);
+ drawGrass();state.food.forEach(drawFood);state.toys.forEach(drawToy);state.jadas.forEach(drawJada);
+ coinsEl.textContent=Math.floor(state.coins);
+ countEl.textContent=`${state.jadas.length} / ${WIN}`;
+ incomeEl.textContent=`${(state.jadas.length*60*COIN_RATE).toFixed(1)} / min`;
+ if(state.jadas.length>=WIN)document.getElementById('win').style.display='flex';
+ if(Math.random()<0.02)save();
+ requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
 
-// --- Interactions ---
+// clicks
 canvas.addEventListener('click',e=>{
-  const rect=canvas.getBoundingClientRect();
-  const scaleX=canvas.width/rect.width,scaleY=canvas.height/rect.height;
-  const x=(e.clientX-rect.left)*scaleX, y=(e.clientY-rect.top)*scaleY;
-  if(tool==="food"&&state.coins>=COSTS.food){
-    state.coins-=COSTS.food;state.food.push({x,y});
-  }else if(tool==="toy"&&state.coins>=COSTS.toy){
-    state.coins-=COSTS.toy;state.toys.push({x,y});
-  }
-  tool=null;
+ const rect=canvas.getBoundingClientRect();
+ const scaleX=canvas.width/rect.width,scaleY=canvas.height/rect.height;
+ const x=(e.clientX-rect.left)*scaleX,y=(e.clientY-rect.top)*scaleY;
+ if(tool==="food"&&state.coins>=COST.food){state.coins-=COST.food;state.food.push({x,y});}
+ else if(tool==="toy"&&state.coins>=COST.toy){state.coins-=COST.toy;state.toys.push({x,y});}
 });
-buyJada.onclick=()=>{if(state.coins>=COSTS.jada){state.coins-=COSTS.jada;state.jadas.push(spawnJada());save();}};
+
+// buttons
+buyJada.onclick=()=>{if(state.coins>=COST.jada){state.coins-=COST.jada;state.jadas.push(spawnJada());save();}};
 buyFood.onclick=()=>tool="food";
 buyToy.onclick=()=>tool="toy";
+resetBtn.onclick=()=>{if(confirm("Reset your world?")){state={coins:0,jadas:[spawnJada()],food:[],toys:[],time:0};save();}};
+toolBtns.forEach(btn=>{
+ btn.addEventListener('click',()=>{tool=btn.dataset.tool;toolBtns.forEach(b=>b.classList.toggle('active',b===btn));});
+});
 </script>
 </body>
 </html>
